@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Para você</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700&family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#2b2236;--paper:#fff8e7;--pink:#ff4d6d}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#5c94fc;font-family:'Nunito',system-ui,sans-serif;color:var(--ink);-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+canvas{position:absolute;left:0;top:0;image-rendering:pixelated;touch-action:manipulation}
+.px{font-family:'Press Start 2P',monospace;line-height:1.6}
+.overlay{position:fixed;inset:0;z-index:10;display:none;align-items:center;justify-content:center;padding:max(20px,env(safe-area-inset-top)) 20px max(20px,env(safe-area-inset-bottom));background:rgba(20,30,70,.45)}
+.overlay.on{display:flex}
+.card{width:min(420px,100%);max-height:100%;overflow:auto;background:var(--paper);padding:26px 22px;text-align:center;box-shadow:0 -4px 0 0 var(--ink),0 4px 0 0 var(--ink),-4px 0 0 0 var(--ink),4px 0 0 0 var(--ink),8px 8px 0 0 rgba(0,0,0,.25)}
+h1,h2{margin:0 0 14px;font-size:15px;color:var(--pink)}
+.count{font-size:9px;color:#8a7f95;margin-bottom:16px}
+p{margin:0 0 20px;font-size:19px;line-height:1.55;font-weight:700}
+.letter p{font-size:17px;text-align:left;font-weight:600;white-space:pre-line}
+button{font-family:'Press Start 2P',monospace;font-size:11px;padding:13px 18px;border:0;background:var(--pink);color:#fff;cursor:pointer;box-shadow:inset -4px -4px 0 rgba(0,0,0,.25),inset 4px 4px 0 rgba(255,255,255,.25)}
+button:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+#mute{position:fixed;z-index:5;top:max(10px,env(safe-area-inset-top));right:10px;font-size:9px;padding:9px 10px;background:rgba(255,255,255,.9);color:var(--ink);box-shadow:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<audio id="musica" src="musica.mp3" loop preload="auto"></audio>
+<button id="mute" hidden>som: on</button>
+
+<div class="overlay on" id="intro"><div class="card">
+  <h1 class="px">pra você</h1>
+  <p>Tem uma surpresa no céu. Toque nos cachorrinhos que passam.</p>
+  <button id="start">abrir</button>
+</div></div>
+
+<div class="overlay" id="modal"><div class="card">
+  <h2 class="px" id="ap"></h2>
+  <div class="count px" id="ct"></div>
+  <p id="fr"></p>
+  <button id="ok">continuar</button>
+</div></div>
+
+<div class="overlay" id="letter"><div class="card letter" id="lcard">
+  <p id="lbody"></p>
+  <button id="again" hidden>recomeçar</button>
+</div></div>
+
+<script>
+// ===== EDITE AQUI =====
+// t = apelido (título do cartão), f = sua frase. Mantenha 7 itens (ou ajuste o número, o jogo se adapta).
+const FRASES = [
+  {t:'vidinha',   f:'tudo me lembra você'},
+  {t:'mozinho',   f:'seu sorriso é o meu lugar favorito'},
+  {t:'seu nenem', f:'com você até o dia ruim fica leve'},
+  {t:'vidinha',   f:'eu escolheria você em todas as versões'},
+  {t:'mozinho',   f:'você é a minha parte favorita do dia'},
+  {t:'seu nenem', f:'do seu lado eu me sinto em casa'},
+  {t:'vidinha',   f:'obrigado por existir na minha vida'}
+];
+// Texto final (\n = quebra de linha).
+const CARTA = "Meu amor,\n\n[ESCREVA AQUI A SUA CARTA. Este texto aparece digitado depois que o último cachorrinho for tocado.]\n\nCom todo o meu amor,\n[seu nome]";
+// Cor do salsicha: b = pelagem, d = sombra/orelha, k = olho/focinho, p = língua.
+const COR = {b:'#c9803a', d:'#8a4f1e', k:'#1b1b1b', p:'#ff7a9a'};
+// ======================
+
+const DOG_A = [
+ "bb....................",
+ ".bb............bbbbbb.",
+ "..bbbbbbbbbbbbddbkbbbk",
+ "..bbbbbbbbbbbbddbbbbbb",
+ "..bbbbbbbbbbbbddbbbbpp",
+ "..dddddddddddd.bbbbb..",
+ "...bb..........bb.....",
+ "..bb............bb...."];
+const DOG_B = DOG_A.slice(0,6).concat([
+ "....bb........bb......",
+ "....bb........bb......"]);
+DOG_A[0] = "bb.............bbbb...";
+DOG_B[0] = DOG_A[0];
+const HEART = [".rr.rr.","rrrrrrr","rrrrrrr",".rrrrr.","..rrr..","...r..."];
+const CLOUD = ["......wwww......","....wwwwwwww....","..wwwwwwwwwwww..",".wwwwwwwwwwwwww.","wwwwwwwwwwwwwwww",".ssssssssssssss."];
+
+function sprite(rows, pal, flip){
+  const w = rows[0].length, h = rows.length, c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const x = c.getContext('2d');
+  rows.forEach((r, j) => { for (let i = 0; i < w; i++){
+    const ch = r[flip ? w-1-i : i];
+    if (pal[ch]){ x.fillStyle = pal[ch]; x.fillRect(i, j, 1, 1); }
+  }});
+  return c;
+}
+const sp = {
+  dog: [[DOG_A, DOG_B].map(r => sprite(r, COR, false)), [DOG_A, DOG_B].map(r => sprite(r, COR, true))],
+  heart: sprite(HEART, {r:'#ff4d6d'}),
+  heartE: sprite(HEART, {r:'rgba(255,255,255,.55)'}),
+  cloud: sprite(CLOUD, {w:'#fff', s:'#cfe3ff'})
+};
+
+const $ = id => document.getElementById(id);
+const cv = $('c'), ctx = cv.getContext('2d'), music = $('musica');
+const rnd = (a, b) => a + Math.random() * (b - a);
+let S, W, H, T = 0, state = 'intro', popped = 0, dogs = [], clouds = [], parts = [], cool = 0, last = performance.now(), tw;
+
+function resize(){
+  S = innerWidth < 700 ? 4 : 5;
+  W = Math.ceil(innerWidth / S); H = Math.ceil(innerHeight / S);
+  cv.width = W; cv.height = H;
+  cv.style.width = W * S + 'px'; cv.style.height = H * S + 'px';
+  ctx.imageSmoothingEnabled = false;
+  clouds = Array.from({length: 6}, () => ({x: rnd(0, W), y: rnd(2, H * .7), s: Math.random() < .5 ? 1 : 2, v: rnd(2, 5)}));
+}
+
+function spawn(){
+  const dir = Math.random() < .5 ? 1 : -1, t = rnd(8, 13), y0 = rnd(.22, .72) * H;
+  let dy = rnd(-.18, .18) * H;
+  dy = Math.max(.2 * H - y0, Math.min(.75 * H - y0, dy));
+  dogs.push({x: dir > 0 ? -22 : W, y: y0, dir, vx: dir * (W + 22) / t, vy: dy / t, ph: rnd(0, 6.28)});
+}
+
+function update(dt){
+  T += dt;
+  for (const c of clouds){ c.x -= c.v * dt; if (c.x < -16 * c.s) c.x = W + rnd(0, 20); }
+  for (const d of dogs){ d.x += d.vx * dt; d.y += d.vy * dt; }
+  dogs = dogs.filter(d => d.dir > 0 ? d.x < W + 2 : d.x > -24);
+  for (const p of parts){ p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 40 * dt; p.l -= dt; }
+  parts = parts.filter(p => p.l > 0);
+  const want = (state === 'play' || state === 'popping') ? Math.min(4, FRASES.length - popped) : 3;
+  cool -= dt;
+  if (dogs.length < want && cool <= 0){ spawn(); cool = rnd(.7, 1.8); }
+}
+
+function draw(){
+  ctx.fillStyle = '#5c94fc'; ctx.fillRect(0, 0, W, H);
+  for (const c of clouds) ctx.drawImage(sp.cloud, Math.round(c.x), Math.round(c.y), 16 * c.s, 6 * c.s);
+  for (const d of dogs){
+    const f = Math.floor(T * 6 + d.ph) & 1, b = Math.round(Math.sin(T * 2 + d.ph) * 1.5);
+    const x = Math.round(d.x), y = Math.round(d.y) + b;
+    ctx.drawImage(sp.dog[d.dir > 0 ? 0 : 1][f], x, y);
+    ctx.drawImage(sp.heart, x + (d.dir > 0 ? 14 : 1), y - 8);
+  }
+  for (const p of parts){ ctx.fillStyle = p.c; ctx.fillRect(Math.round(p.x), Math.round(p.y), 2, 2); }
+  if (state !== 'intro'){
+    const hy = Math.ceil(26 / S);
+    for (let i = 0; i < FRASES.length; i++) ctx.drawImage(i < popped ? sp.heart : sp.heartE, 4 + i * 9, hy);
+  }
+}
+
+function loop(now){
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  if (state !== 'modal') update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+cv.addEventListener('pointerdown', e => {
+  if (state !== 'play') return;
+  const r = cv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+  let best = null, bd = 14 * S;
+  for (const d of dogs){
+    const dist = Math.hypot(px - (d.x + 11) * S, py - d.y * S);
+    if (dist < bd){ bd = dist; best = d; }
+  }
+  if (best) pop(best);
+});
+
+function pop(d){
+  state = 'popping';
+  dogs = dogs.filter(x => x !== d);
+  const cols = ['#ff4d6d', '#ff7a9a', COR.b, '#fff'];
+  for (let i = 0; i < 26; i++){
+    const a = rnd(0, 6.28), v = rnd(15, 50);
+    parts.push({x: d.x + 11, y: d.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 10, l: rnd(.3, .55), c: cols[i % 4]});
+  }
+  const i = popped++;
+  setTimeout(() => showModal(i), 600);
+}
+
+function showModal(i){
+  state = 'modal';
+  $('ap').textContent = FRASES[i].t;
+  $('fr').textContent = FRASES[i].f;
+  $('ct').textContent = (i + 1) + ' de ' + FRASES.length;
+  $('ok').textContent = i === FRASES.length - 1 ? 'abrir a carta' : 'continuar';
+  $('modal').classList.add('on');
+}
+
+$('ok').onclick = () => {
+  $('modal').classList.remove('on');
+  if (popped >= FRASES.length) showLetter(); else state = 'play';
+};
+
+function finishTyping(){ clearInterval(tw); $('lbody').textContent = CARTA; $('again').hidden = false; }
+function showLetter(){
+  state = 'end';
+  $('letter').classList.add('on');
+  $('again').hidden = true; $('lbody').textContent = '';
+  let n = 0; clearInterval(tw);
+  tw = setInterval(() => { $('lbody').textContent = CARTA.slice(0, ++n); if (n >= CARTA.length) finishTyping(); }, 34);
+}
+$('lcard').onclick = () => { if ($('again').hidden) finishTyping(); };
+$('again').onclick = () => { popped = 0; $('letter').classList.remove('on'); state = 'play'; };
+
+$('start').onclick = () => {
+  $('intro').classList.remove('on');
+  state = 'play';
+  music.play().catch(() => {});
+};
+music.addEventListener('canplay', () => { $('mute').hidden = false; });
+$('mute').onclick = () => { music.muted = !music.muted; $('mute').textContent = 'som: ' + (music.muted ? 'off' : 'on'); };
+
+addEventListener('resize', resize);
+resize();
+for (let i = 0; i < 3; i++){ spawn(); dogs[i].x = rnd(0, W - 22); }
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
